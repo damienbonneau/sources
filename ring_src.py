@@ -287,6 +287,14 @@ class Simu(object):
         self.normlattice = self.normlattice_unfiltered # restore the previous matrix
         return purity
     
+     # we want to compute for two cases:
+         # Only filtering the signal / filtering both signal and idler:
+            # * the brightness 
+            # * the purity 
+            # * the heralding efficiency 
+         
+    
+    
     def computeJS(self):
         pass
     
@@ -294,7 +302,6 @@ class Simu(object):
         plotcolormap(self.normlattice,self.extent,fname)  
         
     def __g__(self,i,j):
-        #return (self.normlattice[i,:]*conjugate(self.normlattice[j,:])).sum()
         return (self.normlattice[i,:]*exp(I*self.phases[i,:])*conjugate(self.normlattice[j,:]*exp(I*self.phases[j,:]))).sum()
     
     def __g_nophase__(self,i,j):
@@ -310,8 +317,10 @@ class Simu(object):
     
     vectG = vectorize(__G__)
     vectG_nophase = vectorize(__G_nophase__)
+    
     # Purity = Tr(ro**2)
-    def computenaivepurity(self):
+    # Deprecated, please use computeHeraldedPhotonPurity insteads
+    def computeNaivePurity(self):
         lattice = sqrt(self.normlattice)
         N = self.N
         P = 0
@@ -321,8 +330,9 @@ class Simu(object):
         self.purity = abs(P)
         self.schn = 1./P
         return P
+        
     # Computes the probability of getting coincidences between two heralded photons from different sources
-    
+    # This result can be derived from the purity. 
     def computePcoincfrom2photons(self):
         lattice = sqrt(self.normlattice)
         #print "State Norm:", abs(lattice*conjugate(lattice)).sum() # equivalent to the trace
@@ -356,7 +366,7 @@ class Simu(object):
         purity = self.vectG(self,omega1,omega2,omega2,omega1).sum()
         self.purity = abs(purity)
         self.schn = 1/purity
-        return abs(purity)
+        return abs(purity)a c
               
 ###
 # -----------------------------------------------------------------------------#
@@ -388,7 +398,9 @@ class Simu(object):
 #                       Different cavities can however be used.
 
 # save(filename) : Saves the result of the simulation including all the parameters, the full state, and the derived parameters such as the Schmidt number                                      
-#            
+
+# lattice[idler:signal]  
+         
 class RingSimu(Simu):
     def __init__(self,
                     length = 80., # um 
@@ -556,8 +568,7 @@ class RingSimu(Simu):
             #print P
             
             P=(self.pumpenvelop(lbdas)*self.pumpenvelop(lbdas).conjugate()).sum()*lbda_step
-            print P
-        print P
+
         N = self.nb_points_pump
         # get cavity range
         # If the pump is broader than the cavity, then we should chop the pump to the cavity region such that the grid is fine enough in the cavity
@@ -582,7 +593,7 @@ class RingSimu(Simu):
         return self.normlattice
 
     def getjointprobascaled(self):
-        return self.normlattice/self.normlattice.max()
+        return self.normlattice/self.normlattice.max()    
     
     def computeJS(self, target_proba = 0.1): # begin=1.545,end=1.555,step=0.0001
         xi = (1. - sqrt(1-4*target_proba)) / 2 
@@ -598,6 +609,10 @@ class RingSimu(Simu):
         
         a_lbda_i = arange(lbda_i_min,lbda_i_max,step_i)[0:N]
         a_lbda_s = arange(lbda_s_min,lbda_s_max,step_s)[0:N]
+        
+        self.a_lbda_i = a_lbda_i
+        self.a_lbda_s = a_lbda_s
+        
         Ni = a_lbda_i.size
         Ns = a_lbda_s.size
         print Ni, Ns
@@ -766,9 +781,20 @@ class RingSimu(Simu):
         Z =  self.lattice.sum()# sqrt(abs(lattice*conjugate(lattice)).sum())                  
         self.normlattice = sqrt(abs(self.lattice/Z))         
         f.close()
- 
+        
+    def heraldingEfficiency(self,axis):
+        R = self.r**2
+        eta = self.tau**2
+        cavity_contribution = (1- R) * eta / (1-R*eta) # Inherent cavity transmission tau**2 * T/(1-R) = tau**2
+        #filter_contribution = 
+        if axis in [1, "idler", "i"]:
+            filter_contribution = self.lattice.sum(1) * self.filter_idler(self.a_lbda_i )
+        else:
+            filter_contribution = self.lattice.sum(0) * self.filter_signal(self.a_lbda_s)
+        
+        return cavity_contribution*filter_contribution
+     
 def main():
-    
     T = 5.
     N = 100 
     r = 0.93
